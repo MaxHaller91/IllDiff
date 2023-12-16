@@ -4,10 +4,15 @@ import main_gui
 import threading
 from PIL import Image, ImageTk
 from tkinter import Canvas, Frame, Scrollbar
+from main_gui import time
+
+
 
 # Constants for grid layout
 MAX_COLUMNS = 3  # Set the maximum number of images per row
 image_counter = 0  # To keep track of the number of images added
+
+
 def submit():
     def run_task():
         seed = int(seed_var.get())
@@ -15,7 +20,6 @@ def submit():
         width = int(width_var.get())
         height = int(height_var.get())
         prompt = prompt_var.get()
-        num_outputs = int(num_outputs_var.get())
         guidance_scale = float(guidance_scale_var.get())
         negative_prompt = negative_prompt_var.get()
         qrcode_content = qrcode_content_var.get()
@@ -23,20 +27,46 @@ def submit():
         num_inference_steps = int(num_inference_steps_var.get())
         controlnet_scale = float(controlnet_scale_var.get())
 
-        try:
-            output = main_gui.run_model(seed, image_url, width, height, prompt, num_outputs, guidance_scale, negative_prompt, qrcode_content, qrcode_bg, num_inference_steps, controlnet_scale)
-            if isinstance(output, list):
-                for url in output:
-                    image_path = main_gui.download_image(url)
-                    root.after(0, lambda path=image_path: display_image(path))
+        # Check if batch processing is enabled
+        if batch_processing_var.get():
+            total_images = int(total_images_var.get())
+            calls_needed = (total_images + 3) // 4
 
+            for _ in range(calls_needed):
+                try:
+                    current_output = min(4, total_images)  # Adjust number of outputs per call
+                    total_images -= current_output
 
-        except Exception as e:
+                    output = main_gui.run_model(seed, image_url, width, height, prompt, current_output, guidance_scale, negative_prompt, qrcode_content, qrcode_bg, num_inference_steps, controlnet_scale)
+                    if isinstance(output, list):
+                        for url in output:
+                            image_path = main_gui.download_image(url)
+                            root.after(0, lambda path=image_path: display_image(path))
 
-            root.after(0, lambda e=e: messagebox.showerror("Error", str(e)))
+                    if total_images <= 0:
+                        break  # Exit the loop if all images are processed
 
-    # Run the task in a separate thread
+                    time.sleep(2)  # Wait 2 seconds before the next call
+
+                except Exception as e:
+                    root.after(0, lambda e=e: messagebox.showerror("Error", str(e)))
+
+        else:
+            # Single call with specified number of outputs
+            try:
+                num_outputs = int(num_outputs_var.get())
+                output = main_gui.run_model(seed, image_url, width, height, prompt, num_outputs, guidance_scale, negative_prompt, qrcode_content, qrcode_bg, num_inference_steps, controlnet_scale)
+                if isinstance(output, list):
+                    for url in output:
+                        image_path = main_gui.download_image(url)
+                        root.after(0, lambda path=image_path: display_image(path))
+
+            except Exception as e:
+                root.after(0, lambda e=e: messagebox.showerror("Error", str(e)))
+
     threading.Thread(target=run_task).start()
+
+
 
 
 
@@ -67,6 +97,9 @@ def submit():
 
 root = tk.Tk()
 root.title("Image Generation with Replicate")
+
+# Global variable to track if batch processing is enabled
+batch_processing_var = tk.BooleanVar(value=False)
 
 # Create frames for input and output
 input_frame = Frame(root, bg='red')
@@ -104,6 +137,8 @@ qrcode_content_var = tk.StringVar(value="")
 qrcode_bg_var = tk.StringVar(value="gray")
 num_inference_steps_var = tk.StringVar(value="40")
 controlnet_scale_var = tk.StringVar(value="1.3")
+
+
 
 # Entry widgets with default values
 tk.Label(root, text="Seed:").pack()
@@ -153,6 +188,15 @@ num_inference_steps_entry.pack()
 tk.Label(root, text="ControlNet Conditioning Scale:").pack()
 controlnet_scale_entry = tk.Entry(root, textvariable=controlnet_scale_var)
 controlnet_scale_entry.pack()
+
+# Add a checkbox to the GUI
+batch_processing_check = tk.Checkbutton(root, text="Enable Batch Processing", variable=batch_processing_var)
+batch_processing_check.pack()
+
+total_images_var = tk.StringVar(value="4")  # Default to 4 images
+tk.Label(root, text="Total Images:").pack()
+total_images_entry = tk.Entry(root, textvariable=total_images_var)
+total_images_entry.pack()
 
 submit_button = tk.Button(root, text="Submit", command=submit)
 submit_button.pack()

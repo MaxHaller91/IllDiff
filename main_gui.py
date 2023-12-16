@@ -2,19 +2,29 @@ import replicate
 import requests
 import os
 import time
-os.environ['REPLICATE_API_TOKEN'] = "r8_PUZ2vkr3yTDfVhAqeecyUr4h0RXK3Dh2MmyrG"
 
-def download_image(url, folder="downloaded_images"):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    timestamp = int(time.time())
-    image_name = f"{timestamp}_{url.split('/')[-1]}"
-    path = os.path.join(folder, image_name)
+api_token = os.getenv('REPLICATE_API_TOKEN')
+if not api_token:
+    raise ValueError("Please set the REPLICATE_API_TOKEN environment variable.")
+
+def download_image(url, base_folder="downloaded_images"):
+    # Create a unique folder name using the current timestamp
+    folder_name = str(int(time.time()))
+    folder_path = os.path.join(base_folder, folder_name)
+
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    image_name = url.split("/")[-1]
+    image_path = os.path.join(folder_path, image_name)
+
     response = requests.get(url)
     if response.status_code == 200:
-        with open(path, 'wb') as f:
+        with open(image_path, 'wb') as f:
             f.write(response.content)
-    return path  # Return the path directly
+
+    return image_path
+
 
 
 def run_model(seed, image_url, width, height, prompt, num_outputs, guidance_scale, negative_prompt, qrcode_content, qrcode_bg, num_inference_steps, controlnet_scale):
