@@ -2,7 +2,12 @@ import tkinter as tk
 from tkinter import messagebox
 import main_gui
 import threading
+from PIL import Image, ImageTk
+from tkinter import Canvas, Frame, Scrollbar
 
+# Constants for grid layout
+MAX_COLUMNS = 3  # Set the maximum number of images per row
+image_counter = 0  # To keep track of the number of images added
 def submit():
     def run_task():
         seed = int(seed_var.get())
@@ -22,18 +27,69 @@ def submit():
             output = main_gui.run_model(seed, image_url, width, height, prompt, num_outputs, guidance_scale, negative_prompt, qrcode_content, qrcode_bg, num_inference_steps, controlnet_scale)
             if isinstance(output, list):
                 for url in output:
-                    result = main_gui.download_image(url)
-                    # Update GUI with result (this needs to be done in the main thread)
-                    root.after(0, lambda: result_label.config(text=result))
+                    image_path = main_gui.download_image(url)
+                    root.after(0, lambda path=image_path: display_image(path))
+
+
         except Exception as e:
-            # Show error message
-            root.after(0, lambda: messagebox.showerror("Error", str(e)))
+
+            root.after(0, lambda e=e: messagebox.showerror("Error", str(e)))
 
     # Run the task in a separate thread
     threading.Thread(target=run_task).start()
 
+
+
+    def display_image(image_path):
+        # Use the global keyword to indicate that you want to use the global image_counter
+        global image_counter
+
+        # Load the image
+        img = Image.open(image_path)
+        img.thumbnail((100, 100))  # Resize the image
+        img = ImageTk.PhotoImage(img)
+
+        # Calculate the grid position
+        row = image_counter // MAX_COLUMNS
+        column = image_counter % MAX_COLUMNS
+
+        # Create a label and add the image to the image_container grid
+        label = tk.Label(image_container, image=img)
+        label.image = img  # Keep a reference
+        label.grid(row=row, column=column, padx=5, pady=5)
+
+        # Increment the counter for the next image
+        image_counter += 1
+
+        # Update the scrollregion of the canvas after adding the image
+        onFrameConfigure(canvas)
+
+
 root = tk.Tk()
 root.title("Image Generation with Replicate")
+
+# Create frames for input and output
+input_frame = Frame(root, bg='red')
+output_frame = Frame(root)  # No need for bg color here, as it should be covered by the canvas
+
+input_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False)
+output_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+# Create the canvas with scrollbars inside the output frame
+canvas = Canvas(output_frame)
+v_scroll = Scrollbar(output_frame, orient="vertical", command=canvas.yview)
+v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+canvas.configure(yscrollcommand=v_scroll.set)
+
+canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+# This frame will hold the images inside the canvas
+image_container = Frame(canvas)
+
+# Add the image container to the canvas
+canvas.create_window((0, 0), window=image_container, anchor="nw")
+
+# Add input widgets to the input_frame...
 
 # Variables with default values
 seed_var = tk.StringVar(value="-1")
@@ -103,5 +159,10 @@ submit_button.pack()
 
 result_label = tk.Label(root, text="")
 result_label.pack()
+def onFrameConfigure(_):
+    """Update the scrollregion to encompass the inner frame"""
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    canvas.update_idletasks()  # Update the canvas immediately
 
+image_container.bind("<Configure>", lambda event: onFrameConfigure(None))
 root.mainloop()
